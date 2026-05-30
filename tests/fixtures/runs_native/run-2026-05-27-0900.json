@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "run_id": "run-2026-05-27-0900",
+  "suite": "api-regression",
+  "started_at": "2026-05-27T09:00:00Z",
+  "finished_at": "2026-05-27T09:03:05Z",
+  "git": { "commit": "c3d4e5f", "branch": "main" },
+  "env": { "backend_url": "http://localhost:8080" },
+  "summary": { "total": 6, "passed": 4, "failed": 2, "skipped": 0, "errors": 0 },
+  "tests": [
+    { "id": "tests/test_api.py::test_create_insurance",  "status": "passed", "duration_ms": 240 },
+    { "id": "tests/test_api.py::test_get_insurance",     "status": "passed", "duration_ms": 118 },
+    {
+      "id": "tests/test_api.py::test_search_insurances",
+      "status": "passed",
+      "duration_ms": 290
+    },
+    { "id": "tests/test_api.py::test_update_insurance",  "status": "passed", "duration_ms": 205 },
+    {
+      "id": "tests/test_api.py::test_delete_insurance",
+      "status": "failed",
+      "duration_ms": 108,
+      "error": {
+        "type": "AssertionError",
+        "message": "Expected 204, got 200",
+        "fingerprint": "del-204-vs-200"
+      }
+    },
+    {
+      "id": "tests/test_mcp.py::test_list_tools_count",
+      "status": "failed",
+      "duration_ms": 50,
+      "error": {
+        "type": "AssertionError",
+        "message": "Expected 12 tools, got 11",
+        "fingerprint": "tools-count-12-vs-11"
+      }
+    }
+  ]
+}

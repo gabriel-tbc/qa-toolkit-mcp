@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Virtual env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-local runs (real reports go in QA_TOOKIT_RUNS_DIR or wherever the user points it)
+/runs/
+!/tests/fixtures/runs/
+
+# pytest
+.pytest_cache/
+
+# Local config (per-machine, per-user). The template lives in .env.example.
+.env

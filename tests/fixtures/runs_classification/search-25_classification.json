@@ -1,0 +1,50 @@
+{
+  "xml_report": "reports\\regression\\search\\search-25.xml",
+  "fecha": "2026-05-25 12:36:37",
+  "tests": 8,
+  "passed": 5,
+  "failed": 3,
+  "failures": 3,
+  "errors": 0,
+  "classifications": [
+    {
+      "case_id": "SI-POS-005",
+      "description": "page negativo",
+      "test": "test_search_insurances_negative[SI-POS-005]",
+      "status": "failed",
+      "classification": "validation-expected",
+      "reason": "page negativo no debe aceptarse como pagina valida.",
+      "message": "Expected error, got: 'success'",
+      "payload": {"page": -1, "rows": 10},
+      "expected": {"kind": "error", "classification": "validation-expected"},
+      "result_summary": {"_kind": "success"},
+      "raw_result": "{\"content\":[]}"
+    },
+    {
+      "case_id": "SI-POS-006",
+      "description": "Ordenacion documentada por productName",
+      "test": "test_search_insurances_positive[SI-POS-006]",
+      "status": "failed",
+      "classification": "bug real",
+      "reason": "Documented valid sort field. Upstream SQLGrammarException.",
+      "message": "Expected success, got: 'error' - Search insurances Error: SQLGrammarException: could not extract ResultSet",
+      "payload": {"sort": "productName", "order": "ASC", "rows": 10},
+      "expected": {"kind": "success", "classification": "bug real"},
+      "result_summary": {"_kind": "error", "message": "SQLGrammarException"},
+      "raw_result": "SQLGrammarException: could not extract ResultSet"
+    },
+    {
+      "case_id": "SI-POS-007",
+      "description": "Ordenacion documentada por surname",
+      "test": "test_search_insurances_positive[SI-POS-007]",
+      "status": "failed",
+      "classification": "unclassified",
+      "reason": "Pendiente de revisar.",
+      "message": "Expected success, got: 'error' - Search insurances Error: SQLGrammarException: could not extract ResultSet",
+      "payload": {"sort": "surname", "order": "ASC", "rows": 10},
+      "expected": {"kind": "success", "classification": "bug real"},
+      "result_summary": {"_kind": "error", "message": "SQLGrammarException"},
+      "raw_result": "SQLGrammarException: could not extract ResultSet"
+    }
+  ]
+}

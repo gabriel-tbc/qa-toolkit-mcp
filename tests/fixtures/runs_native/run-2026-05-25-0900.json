@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "run_id": "run-2026-05-25-0900",
+  "suite": "api-regression",
+  "started_at": "2026-05-25T09:00:00Z",
+  "finished_at": "2026-05-25T09:02:11Z",
+  "git": { "commit": "a1b2c3d", "branch": "main" },
+  "env": { "backend_url": "http://localhost:8080" },
+  "summary": { "total": 5, "passed": 4, "failed": 1, "skipped": 0, "errors": 0 },
+  "tests": [
+    { "id": "tests/test_api.py::test_create_insurance",  "status": "passed", "duration_ms": 245 },
+    { "id": "tests/test_api.py::test_get_insurance",     "status": "passed", "duration_ms": 120 },
+    { "id": "tests/test_api.py::test_search_insurances", "status": "passed", "duration_ms": 310 },
+    { "id": "tests/test_api.py::test_update_insurance",  "status": "passed", "duration_ms": 198 },
+    {
+      "id": "tests/test_api.py::test_delete_insurance",
+      "status": "failed",
+      "duration_ms": 102,
+      "error": {
+        "type": "AssertionError",
+        "message": "Expected 204, got 200",
+        "fingerprint": "del-204-vs-200"
+      }
+    }
+  ]
+}

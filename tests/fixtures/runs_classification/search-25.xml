@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="search_insurances" tests="8" failures="3" errors="0" skipped="0" time="9.50">
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_positive[SI-POS-001]" time="1.10"/>
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_positive[SI-POS-002]" time="0.92"/>
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_positive[SI-POS-003]" time="1.05"/>
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_positive[SI-POS-004]" time="1.20"/>
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_negative[SI-POS-005]" time="0.50">
+      <failure type="AssertionError" message="Expected error, got: 'success'">Expected error, got: 'success'</failure>
+    </testcase>
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_positive[SI-POS-006]" time="1.80">
+      <failure type="AssertionError" message="Expected success, got: 'error'">SQLGrammarException</failure>
+    </testcase>
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_positive[SI-POS-007]" time="1.75">
+      <failure type="AssertionError" message="Expected success, got: 'error'">SQLGrammarException</failure>
+    </testcase>
+    <testcase classname="test.mcp.test_search_insurances_suite" name="test_search_insurances_positive[SI-POS-008]" time="1.18"/>
+  </testsuite>
+</testsuites>

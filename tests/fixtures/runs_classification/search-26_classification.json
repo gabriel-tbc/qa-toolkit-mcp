@@ -1,0 +1,63 @@
+{
+  "xml_report": "reports\\regression\\search\\search-26.xml",
+  "fecha": "2026-05-26 12:36:37",
+  "tests": 9,
+  "passed": 5,
+  "failed": 4,
+  "failures": 4,
+  "errors": 0,
+  "classifications": [
+    {
+      "case_id": "SI-POS-006",
+      "description": "Ordenacion documentada por productName",
+      "test": "test_search_insurances_positive[SI-POS-006]",
+      "status": "failed",
+      "classification": "bug real",
+      "reason": "Documented valid sort field. Upstream SQLGrammarException.",
+      "message": "Expected success, got: 'error' - Search insurances Error: SQLGrammarException: could not extract ResultSet",
+      "payload": {"sort": "productName", "order": "ASC", "rows": 10},
+      "expected": {"kind": "success", "classification": "bug real"},
+      "result_summary": {"_kind": "error", "message": "SQLGrammarException"},
+      "raw_result": "SQLGrammarException: could not extract ResultSet"
+    },
+    {
+      "case_id": "SI-POS-007",
+      "description": "Ordenacion documentada por surname",
+      "test": "test_search_insurances_positive[SI-POS-007]",
+      "status": "failed",
+      "classification": "bug real",
+      "reason": "Confirmado tras nueva exploracion: bug del backend.",
+      "message": "Expected success, got: 'error' - Search insurances Error: SQLGrammarException: could not extract ResultSet",
+      "payload": {"sort": "surname", "order": "ASC", "rows": 10},
+      "expected": {"kind": "success", "classification": "bug real"},
+      "result_summary": {"_kind": "error", "message": "SQLGrammarException"},
+      "raw_result": "SQLGrammarException: could not extract ResultSet"
+    },
+    {
+      "case_id": "SI-POS-008",
+      "description": "Filtro insuredName",
+      "test": "test_search_insurances_positive[SI-POS-008]",
+      "status": "failed",
+      "classification": "unclassified",
+      "reason": "Pendiente de revisar — empezo a fallar hoy.",
+      "message": "Expected success, got: 'error' - timeout while contacting backend",
+      "payload": {"insuredName": "Test", "rows": 10},
+      "expected": {"kind": "success", "classification": "positive-functional"},
+      "result_summary": {"_kind": "error", "message": "timeout"},
+      "raw_result": "Connection timeout after 30000ms"
+    },
+    {
+      "case_id": "SI-POS-009",
+      "description": "Unicode en insuredName",
+      "test": "test_search_insurances_positive[SI-POS-009]",
+      "status": "failed",
+      "classification": "schema-strictness-candidate",
+      "reason": "Rechaza caracteres unicode no documentados.",
+      "message": "Expected success, got: 'error' - encoding error",
+      "payload": {"insuredName": "Jose Maria", "rows": 10},
+      "expected": {"kind": "success", "classification": "positive-functional"},
+      "result_summary": {"_kind": "error", "message": "encoding"},
+      "raw_result": "EncodingException: invalid character"
+    }
+  ]
+}

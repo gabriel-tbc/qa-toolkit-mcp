@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qa-toolkit-mcp/schemas/run-report.v1.json",
+  "title": "Run Report v1",
+  "description": "A single test run produced by any test framework. Consumed by qa-toolkit-mcp. Versions 1.0 and 1.1 are both accepted; 1.1 adds optional `classification` per test and optional `is_exhaustive` at the top level.",
+  "type": "object",
+  "required": ["schema_version", "run_id", "suite", "started_at", "summary", "tests"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0", "1.1"],
+      "description": "Schema version. 1.0 is the original; 1.1 adds classification + is_exhaustive."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for the run. Recommended: 'run-YYYY-MM-DD-HHMM' or a UUID."
+    },
+    "suite": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Logical suite name. Used to group runs and filter listings."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp when the run started."
+    },
+    "finished_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp when the run finished. Null if the run did not complete cleanly."
+    },
+    "is_exhaustive": {
+      "type": "boolean",
+      "default": true,
+      "description": "v1.1+. True iff `tests[]` lists every test that ran. False when the report only contains the failures and passed tests must be inferred (e.g., a classification report without a JUnit XML companion)."
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commit": { "type": "string" },
+        "branch": { "type": "string" }
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "passed", "failed", "skipped", "errors"],
+      "additionalProperties": false,
+      "properties": {
+        "total":   { "type": "integer", "minimum": 0 },
+        "passed":  { "type": "integer", "minimum": 0 },
+        "failed":  { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "errors":  { "type": "integer", "minimum": 0 }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable identifier across runs."
+          },
+          "name": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "skipped", "error"]
+          },
+          "duration_ms": { "type": ["number", "null"], "minimum": 0 },
+          "error": {
+            "type": ["object", "null"],
+            "required": ["type", "message", "fingerprint"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "message": { "type": "string" },
+              "fingerprint": { "type": "string", "minLength": 8 }
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "classification": {
+            "type": ["string", "null"],
+            "enum": [
+              null,
+              "unclassified",
+              "positive-functional",
+              "validation-expected",
+              "schema-strictness-candidate",
+              "business-rule-candidate",
+              "integration-gap-or-provider-error",
+              "bug real",
+              "manual-review: pendiente usuario"
+            ],
+            "description": "v1.1+. QA-assigned classification of the test outcome. Optional. The catalog is a set of outcome labels a reviewer can assign."
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+<!--
+  Evaluations for qa-toolkit-mcp v0.1.
+
+  Format follows the mcp-builder skill spec (Phase 4): 10 read-only,
+  independent, deterministic questions that an LLM should be able to answer
+  using ONLY the tools of this MCP, against the fixture runs.
+
+  Each <answer> is verified by direct string comparison. Question phrasing
+  fixes the output format to make verification unambiguous.
+
+  Verification: run with scripts/evaluation.py from the mcp-builder skill
+  pointing at this MCP. Expected ~100% pass on a competent model.
+-->
+<evaluation>
+
+  <qa_pair>
+    <question>How many test runs are stored in the runs directory? Answer with a single integer and nothing else.</question>
+    <answer>3</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>What is the suite name common to all stored runs? Answer with the exact suite identifier and nothing else.</question>
+    <answer>api-regression</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>In the run started at 2026-05-25T09:00:00Z, how many tests failed? Answer with a single integer.</question>
+    <answer>1</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Comparing the run from 2026-05-25 to the run from 2026-05-26 (older to newer), exactly one test regressed (passed before, failed after). What is its fully qualified test id? Answer with the test id and nothing else.</question>
+    <answer>tests/test_api.py::test_search_insurances</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Comparing the run from 2026-05-26 to the run from 2026-05-27 (older to newer), exactly one test went from failing to passing. What is its fully qualified test id?</question>
+    <answer>tests/test_api.py::test_search_insurances</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Across all three stored runs, one test consistently fails with the same error fingerprint. What is its fully qualified test id?</question>
+    <answer>tests/test_api.py::test_delete_insurance</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>The run from 2026-05-27 introduces a test that did not exist in any earlier run. What is the fully qualified id of that new test?</question>
+    <answer>tests/test_mcp.py::test_list_tools_count</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>What is the error type (e.g., AssertionError) reported for the persistently failing test in the run from 2026-05-27? Answer with the error type only.</question>
+    <answer>AssertionError</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>What git commit SHA is associated with the run from 2026-05-26? Answer with the commit string only.</question>
+    <answer>b2c3d4e</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Comparing the run from 2026-05-25 to the run from 2026-05-27 (older to newer), how many regressions are reported? Answer with a single integer.</question>
+    <answer>0</answer>
+  </qa_pair>
+
+</evaluation>

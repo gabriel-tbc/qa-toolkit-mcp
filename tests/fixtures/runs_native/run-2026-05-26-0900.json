@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "run_id": "run-2026-05-26-0900",
+  "suite": "api-regression",
+  "started_at": "2026-05-26T09:00:00Z",
+  "finished_at": "2026-05-26T09:02:30Z",
+  "git": { "commit": "b2c3d4e", "branch": "main" },
+  "env": { "backend_url": "http://localhost:8080" },
+  "summary": { "total": 5, "passed": 3, "failed": 2, "skipped": 0, "errors": 0 },
+  "tests": [
+    { "id": "tests/test_api.py::test_create_insurance",  "status": "passed", "duration_ms": 250 },
+    { "id": "tests/test_api.py::test_get_insurance",     "status": "passed", "duration_ms": 115 },
+    {
+      "id": "tests/test_api.py::test_search_insurances",
+      "status": "failed",
+      "duration_ms": 305,
+      "error": {
+        "type": "AssertionError",
+        "message": "Expected non-empty list, got []",
+        "fingerprint": "search-empty-result"
+      }
+    },
+    { "id": "tests/test_api.py::test_update_insurance",  "status": "passed", "duration_ms": 200 },
+    {
+      "id": "tests/test_api.py::test_delete_insurance",
+      "status": "failed",
+      "duration_ms": 105,
+      "error": {
+        "type": "AssertionError",
+        "message": "Expected 204, got 200",
+        "fingerprint": "del-204-vs-200"
+      }
+    }
+  ]
+}

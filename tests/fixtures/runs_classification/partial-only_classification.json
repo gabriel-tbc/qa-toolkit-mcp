@@ -1,0 +1,23 @@
+{
+  "fecha": "2026-05-27 09:00:00",
+  "tests": 5,
+  "passed": 4,
+  "failed": 1,
+  "failures": 1,
+  "errors": 0,
+  "classifications": [
+    {
+      "case_id": "SI-POS-001",
+      "description": "Caso sin XML hermano",
+      "test": "test_partial[SI-POS-001]",
+      "status": "failed",
+      "classification": "bug real",
+      "reason": "Reproducible en local.",
+      "message": "Expected success, got: 'error' - boom",
+      "payload": {},
+      "expected": {"kind": "success", "classification": "positive-functional"},
+      "result_summary": {"_kind": "error", "message": "boom"},
+      "raw_result": "BoomError: boom"
+    }
+  ]
+}
