@@ -21,10 +21,10 @@ from __future__ import annotations
 import logging
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field, StringConstraints
 
 from . import config, storage
 from .compare import compare_runs
@@ -56,49 +56,20 @@ mcp = FastMCP("qa_toolkit_mcp")
 # and prompts, and it handles the underlying communication protocol.
 
 
-# ─── Input models ────────────────────────────────────────────────────────────
+# ─── Shared parameter types ──────────────────────────────────────────────────
+#
+# Tools expose their parameters as flat, top-level arguments (run_a, run_b, …)
+# rather than a single nested `params` object. FastMCP derives each tool's
+# inputSchema from the function signature: one parameter becomes one top-level
+# JSON property. A single Pydantic-model parameter would instead nest every
+# field under a *required* `params` wrapper — a shape LLM callers routinely
+# flatten and so fail to provide. See docs/adr/0001-flatten-tool-parameters.md.
+#
+# `_NonEmptyStr` reproduces the former input models' `str_strip_whitespace=True`
+# + `min_length=1` on run-id arguments, so validation is unchanged.
 
-
-class ListRunsInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    suite: Optional[str] = Field(
-        default=None,
-        description="Filter by suite name (exact match). Omit to include all suites.",
-    )
-    since: Optional[datetime] = Field(
-        default=None,
-        description="Inclusive lower bound on started_at (ISO 8601, e.g. '2026-05-20T00:00:00Z').",
-    )
-    until: Optional[datetime] = Field(
-        default=None,
-        description="Inclusive upper bound on started_at (ISO 8601).",
-    )
-    limit: int = Field(default=50, ge=1, le=200, description="Max runs to return.")
-    offset: int = Field(default=0, ge=0, description="Number of matching runs to skip.")
-    response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
-        description="'markdown' for human-readable, 'json' for programmatic.",
-    )
-
-
-class GetRunInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    run_id: str = Field(..., min_length=1, description="Exact run_id (file stem, no extension).")
-    include_passed: bool = Field(
-        default=False,
-        description="If true, include passed tests in the output. Default false to keep context small.",
-    )
-    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
-
-
-class CompareRunsInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    run_a: str = Field(..., min_length=1, description="Baseline run_id (treated as 'before').")
-    run_b: str = Field(..., min_length=1, description="Newer run_id (treated as 'after').")
-    response_format: ResponseFormat = Field(default=ResponseFormat.MARKDOWN)
+_NonEmptyStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+_OptStrippedStr = Annotated[Optional[str], StringConstraints(strip_whitespace=True)]
 
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
@@ -114,7 +85,26 @@ class CompareRunsInput(BaseModel):
         "openWorldHint": False,
     },
 )
-async def qa_list_runs(params: ListRunsInput) -> str:
+async def qa_list_runs(
+    suite: Annotated[
+        _OptStrippedStr,
+        Field(description="Filter by suite name (exact match). Omit to include all suites."),
+    ] = None,
+    since: Annotated[
+        Optional[datetime],
+        Field(description="Inclusive lower bound on started_at (ISO 8601, e.g. '2026-05-20T00:00:00Z')."),
+    ] = None,
+    until: Annotated[
+        Optional[datetime],
+        Field(description="Inclusive upper bound on started_at (ISO 8601)."),
+    ] = None,
+    limit: Annotated[int, Field(ge=1, le=200, description="Max runs to return.")] = 50,
+    offset: Annotated[int, Field(ge=0, description="Number of matching runs to skip.")] = 0,
+    response_format: Annotated[
+        ResponseFormat,
+        Field(description="'markdown' for human-readable, 'json' for programmatic."),
+    ] = ResponseFormat.MARKDOWN,
+) -> str:
     """List available test runs from the configured runs directory.
 
     Returns metadata only (run_id, suite, timestamps, counts) — not the full
@@ -148,11 +138,11 @@ async def qa_list_runs(params: ListRunsInput) -> str:
             except StorageError as exc:
                 logger.warning("Skipping malformed run %s: %s", rid, exc)
                 continue
-            if params.suite and run.suite != params.suite:
+            if suite and run.suite != suite:
                 continue
-            if params.since and run.started_at < params.since:
+            if since and run.started_at < since:
                 continue
-            if params.until and run.started_at > params.until:
+            if until and run.started_at > until:
                 continue
             matched.append(
                 {
@@ -165,25 +155,25 @@ async def qa_list_runs(params: ListRunsInput) -> str:
 
         matched.sort(key=lambda r: r["started_at"])
         total = len(matched)
-        page = matched[params.offset : params.offset + params.limit]
-        has_more = params.offset + len(page) < total
-        next_offset = params.offset + len(page) if has_more else None
+        page = matched[offset : offset + limit]
+        has_more = offset + len(page) < total
+        next_offset = offset + len(page) if has_more else None
 
-        if params.response_format == ResponseFormat.JSON:
+        if response_format == ResponseFormat.JSON:
             import json as _json
 
             return _json.dumps(
                 {
                     "total": total,
                     "count": len(page),
-                    "offset": params.offset,
+                    "offset": offset,
                     "has_more": has_more,
                     "next_offset": next_offset,
                     "items": page,
                 },
                 indent=2,
             )
-        return format_run_list_markdown(page, total, params.offset, has_more)
+        return format_run_list_markdown(page, total, offset, has_more)
 
     except StorageError as exc:
         return f"Error: {exc}"
@@ -199,7 +189,20 @@ async def qa_list_runs(params: ListRunsInput) -> str:
         "openWorldHint": False,
     },
 )
-async def qa_get_run(params: GetRunInput) -> str:
+async def qa_get_run(
+    run_id: Annotated[
+        _NonEmptyStr,
+        Field(description="Exact run_id (file stem, no extension)."),
+    ],
+    include_passed: Annotated[
+        bool,
+        Field(description="If true, include passed tests in the output. Default false to keep context small."),
+    ] = False,
+    response_format: Annotated[
+        ResponseFormat,
+        Field(description="'markdown' for human-readable, 'json' for programmatic."),
+    ] = ResponseFormat.MARKDOWN,
+) -> str:
     """Return a single test run by id.
 
     By default, only failed/error tests are listed in the body (to keep context
@@ -212,10 +215,10 @@ async def qa_get_run(params: GetRunInput) -> str:
     Error response: string starting with "Error: ..." (e.g., "Error: Run not found").
     """
     try:
-        run = storage.load_run(params.run_id)
-        if params.response_format == ResponseFormat.JSON:
+        run = storage.load_run(run_id)
+        if response_format == ResponseFormat.JSON:
             return to_json(run)
-        return format_run_markdown(run, include_passed=params.include_passed)
+        return format_run_markdown(run, include_passed=include_passed)
     except StorageError as exc:
         return f"Error: {exc}. Use qa_list_runs to see available run_ids."
 
@@ -230,7 +233,20 @@ async def qa_get_run(params: GetRunInput) -> str:
         "openWorldHint": False,
     },
 )
-async def qa_compare_runs(params: CompareRunsInput) -> str:
+async def qa_compare_runs(
+    run_a: Annotated[
+        _NonEmptyStr,
+        Field(description="Baseline run_id (treated as 'before')."),
+    ],
+    run_b: Annotated[
+        _NonEmptyStr,
+        Field(description="Newer run_id (treated as 'after')."),
+    ],
+    response_format: Annotated[
+        ResponseFormat,
+        Field(description="'markdown' for human-readable, 'json' for programmatic."),
+    ] = ResponseFormat.MARKDOWN,
+) -> str:
     """Compare two test runs and categorize the differences.
 
     `run_a` is treated as baseline (older), `run_b` as newer.
@@ -254,10 +270,10 @@ async def qa_compare_runs(params: CompareRunsInput) -> str:
     Error response: string starting with "Error: ...".
     """
     try:
-        run_a = storage.load_run(params.run_a)
-        run_b = storage.load_run(params.run_b)
-        result = compare_runs(run_a, run_b)
-        if params.response_format == ResponseFormat.JSON:
+        report_a = storage.load_run(run_a)
+        report_b = storage.load_run(run_b)
+        result = compare_runs(report_a, report_b)
+        if response_format == ResponseFormat.JSON:
             return to_json(result)
         return format_comparison_markdown(result)
     except StorageError as exc:

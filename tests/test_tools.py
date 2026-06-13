@@ -13,21 +13,22 @@ import pytest
 
 from qa_toolkit_mcp.formatters import ResponseFormat
 from qa_toolkit_mcp.server import (
-    CompareRunsInput,
-    GetRunInput,
-    ListRunsInput,
     qa_compare_runs,
     qa_get_run,
     qa_list_runs,
     run_summary,
 )
 
+# Tools take flat, top-level parameters (no `params` wrapper). Calling the
+# decorated functions with keyword args mirrors how an MCP client maps the
+# flat inputSchema onto a tool call. See docs/adr/0001-flatten-tool-parameters.md.
+
 
 # ─── qa_list_runs ────────────────────────────────────────────────────────────
 
 
 async def test_list_runs_json_returns_all_fixtures():
-    out = await qa_list_runs(ListRunsInput(response_format=ResponseFormat.JSON))
+    out = await qa_list_runs(response_format=ResponseFormat.JSON)
     data = json.loads(out)
     assert data["total"] == 3
     assert data["count"] == 3
@@ -40,7 +41,7 @@ async def test_list_runs_json_returns_all_fixtures():
 
 async def test_list_runs_filters_by_suite():
     out = await qa_list_runs(
-        ListRunsInput(suite="nonexistent-suite", response_format=ResponseFormat.JSON)
+        suite="nonexistent-suite", response_format=ResponseFormat.JSON
     )
     data = json.loads(out)
     assert data["total"] == 0
@@ -48,7 +49,7 @@ async def test_list_runs_filters_by_suite():
 
 async def test_list_runs_paginates():
     out = await qa_list_runs(
-        ListRunsInput(limit=2, offset=0, response_format=ResponseFormat.JSON)
+        limit=2, offset=0, response_format=ResponseFormat.JSON
     )
     data = json.loads(out)
     assert data["count"] == 2
@@ -57,7 +58,7 @@ async def test_list_runs_paginates():
 
 
 async def test_list_runs_markdown_contains_table():
-    out = await qa_list_runs(ListRunsInput(response_format=ResponseFormat.MARKDOWN))
+    out = await qa_list_runs(response_format=ResponseFormat.MARKDOWN)
     assert "| run_id |" in out
     assert "run-2026-05-25-0900" in out
 
@@ -66,7 +67,7 @@ async def test_list_runs_markdown_contains_table():
 
 
 async def test_get_run_markdown_omits_passed_by_default():
-    out = await qa_get_run(GetRunInput(run_id="run-2026-05-25-0900"))
+    out = await qa_get_run(run_id="run-2026-05-25-0900")
     assert "## Failures" in out
     assert "test_delete_insurance" in out
     # The 4 passed tests should NOT appear by default.
@@ -74,14 +75,12 @@ async def test_get_run_markdown_omits_passed_by_default():
 
 
 async def test_get_run_markdown_includes_passed_when_requested():
-    out = await qa_get_run(
-        GetRunInput(run_id="run-2026-05-25-0900", include_passed=True)
-    )
+    out = await qa_get_run(run_id="run-2026-05-25-0900", include_passed=True)
     assert "test_create_insurance" in out
 
 
 async def test_get_run_unknown_returns_actionable_error():
-    out = await qa_get_run(GetRunInput(run_id="nope"))
+    out = await qa_get_run(run_id="nope")
     assert out.startswith("Error:")
     assert "qa_list_runs" in out  # actionable: tells the agent what to do next
 
@@ -91,10 +90,8 @@ async def test_get_run_unknown_returns_actionable_error():
 
 async def test_compare_runs_markdown_reports_regression():
     out = await qa_compare_runs(
-        CompareRunsInput(
-            run_a="run-2026-05-25-0900",
-            run_b="run-2026-05-26-0900",
-        )
+        run_a="run-2026-05-25-0900",
+        run_b="run-2026-05-26-0900",
     )
     assert "1 regression" in out
     assert "test_search_insurances" in out
@@ -102,11 +99,9 @@ async def test_compare_runs_markdown_reports_regression():
 
 async def test_compare_runs_json_has_full_structure():
     out = await qa_compare_runs(
-        CompareRunsInput(
-            run_a="run-2026-05-25-0900",
-            run_b="run-2026-05-27-0900",
-            response_format=ResponseFormat.JSON,
-        )
+        run_a="run-2026-05-25-0900",
+        run_b="run-2026-05-27-0900",
+        response_format=ResponseFormat.JSON,
     )
     data = json.loads(out)
     assert "counts" in data
@@ -115,9 +110,7 @@ async def test_compare_runs_json_has_full_structure():
 
 
 async def test_compare_runs_unknown_run_id():
-    out = await qa_compare_runs(
-        CompareRunsInput(run_a="nope", run_b="run-2026-05-26-0900")
-    )
+    out = await qa_compare_runs(run_a="nope", run_b="run-2026-05-26-0900")
     assert out.startswith("Error:")
 
 
@@ -138,3 +131,43 @@ async def test_resource_synthesizes_md_when_companion_missing():
 async def test_resource_error_for_unknown_run():
     md = await run_summary("nope")
     assert "Error" in md
+
+
+# ─── Tool schema shape (guards against re-introducing a `params` wrapper) ─────
+
+
+async def test_tools_expose_flat_top_level_params():
+    """Each tool's inputSchema must expose its fields at top level, not nested
+    under a single `params` object — a shape LLM callers routinely fail to
+    produce. See docs/adr/0001-flatten-tool-parameters.md.
+    """
+    from qa_toolkit_mcp.server import mcp
+
+    tools = {t.name: t for t in await mcp.list_tools()}
+
+    assert set(tools["qa_compare_runs"].inputSchema["properties"]) == {
+        "run_a",
+        "run_b",
+        "response_format",
+    }
+    assert tools["qa_compare_runs"].inputSchema["required"] == ["run_a", "run_b"]
+
+    assert set(tools["qa_get_run"].inputSchema["properties"]) == {
+        "run_id",
+        "include_passed",
+        "response_format",
+    }
+    assert tools["qa_get_run"].inputSchema["required"] == ["run_id"]
+
+    assert set(tools["qa_list_runs"].inputSchema["properties"]) == {
+        "suite",
+        "since",
+        "until",
+        "limit",
+        "offset",
+        "response_format",
+    }
+
+    # No tool may wrap its arguments in a single `params` object.
+    for name, tool in tools.items():
+        assert "params" not in tool.inputSchema["properties"], name
