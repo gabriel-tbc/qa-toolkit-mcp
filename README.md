@@ -16,6 +16,10 @@ The split is deliberate: the producer of reports (your pytest job, your pipeline
 | Resource | `run://{run_id}/summary.md` | Markdown summary of a run for the host to load into context. |
 | Prompt | `weekly_regression_review` | Orchestrates list → compare consecutive pairs → real-regression report. |
 
+All tool parameters are exposed as **flat, top-level arguments** (`run_a`,
+`run_b`, …), not nested under a `params` wrapper — a model-callability decision
+documented in [`docs/adr/0001-flatten-tool-parameters.md`](docs/adr/0001-flatten-tool-parameters.md).
+
 ## The core idea: categorize, don't diff
 
 `qa_compare_runs` sorts every test transition into the buckets a QA engineer actually acts on:
@@ -150,13 +154,15 @@ qa_toolkit_mcp/
   formatters.py             Models → Markdown / JSON
   config.py                 .env + env-var resolution
 schemas/run-report.v1.json  The report contract (source of truth)
+docs/adr/                   Architecture Decision Records (e.g. 0001 — flatten tool parameters)
 evaluations/                LLM evaluation questions for the server
 tests/                      Layered + metamorphic test suite
 ```
 
 ## Status
 
-v0.1 — stdio transport, three tools, one resource, one prompt. Not yet published to PyPI.
+v0.1 — stdio transport, three tools (flat-parameter schema, see ADR 0001),
+one resource, one prompt. Not yet published to PyPI.
 
 ## License
 
