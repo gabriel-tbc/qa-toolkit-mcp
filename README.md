@@ -1,97 +1,89 @@
 # qa-toolkit-mcp
 
-An [MCP](https://modelcontextprotocol.io) server that turns test-run reports into **regression analysis** an LLM agent can reason about.
+An [MCP](https://modelcontextprotocol.io) server that reads test reports and turns them into a regression analysis a model can work with. It does not run your tests. It reads the reports your test runs already write, and answers questions like "what regressed between Monday and Friday, and which of these failures are just the same known issues?"
 
-It does not run your tests. It **reads the reports your test runs already produce** (manual, CI, or cron) and answers questions like *"what regressed between Monday and Friday, and which failures are just known issues?"* — categorizing every change instead of dumping a raw diff.
+I built it so an agent can do the boring part of a weekly regression review for me: line up the runs, compare them, and tell me what actually broke instead of handing me a raw diff.
 
-The split is deliberate: the producer of reports (your pytest job, your pipeline) stays completely decoupled from the consumer (this server). Anything that emits the report schema can be analyzed.
+## What it does
 
-## What it exposes
+You point it at a folder of run reports (the JSON your CI, your cron job, or your manual runs already produce) and it gives a model three tools, one resource, and one prompt:
 
-| Kind | Name | Purpose |
-|---|---|---|
-| Tool | `qa_list_runs` | List available runs with summary counts (filter by suite / date, paginated). |
-| Tool | `qa_get_run` | Return one run; failures only by default to keep agent context small. |
-| Tool | `qa_compare_runs` | Categorized regression analysis between two runs (the core). |
-| Resource | `run://{run_id}/summary.md` | Markdown summary of a run for the host to load into context. |
-| Prompt | `weekly_regression_review` | Orchestrates list → compare consecutive pairs → real-regression report. |
+- `qa_list_runs` - lists the runs in the folder. You can filter by suite or by date, and it pages.
+- `qa_get_run` - returns one run. By default it only lists the failures, to keep the model's context small. Pass `include_passed` when you want everything.
+- `qa_compare_runs` - takes two runs and sorts what changed between them. This is the main one.
+- `run://{run_id}/summary.md` (resource) - a Markdown summary of a single run the host can load.
+- `weekly_regression_review` (prompt) - walks the model through a week: list the runs, compare each consecutive pair, and write a short report.
 
-All tool parameters are exposed as **flat, top-level arguments** (`run_a`,
-`run_b`, …), not nested under a `params` wrapper — a model-callability decision
-documented in [`docs/adr/0001-flatten-tool-parameters.md`](docs/adr/0001-flatten-tool-parameters.md).
+`qa_compare_runs` does not hand you a raw diff. It sorts every test into the buckets a QA person actually acts on:
 
-## The core idea: categorize, don't diff
+- **regression** - passed in A, failed in B. The one you care about most.
+- **fix** - failed in A, passed in B.
+- **persistent failure** - failed in both. It also tells you whether it is the same error as before or a new one (see fingerprints below).
+- **new test / removed test** - showed up or disappeared between the two runs.
+- **classification change** - the QA label changed, even when the pass/fail did not. "Still failing here, but we changed our mind about why."
 
-`qa_compare_runs` sorts every test transition into the buckets a QA engineer actually acts on:
-
-| Bucket | Meaning |
-|---|---|
-| **Regression** | passed in A, failed in B — the expensive signal |
-| **Fix** | failed in A, passed in B — validates a change |
-| **Persistent failure** | failed in both; `same_error` flag from a fingerprint match |
-| **New / Removed test** | appeared / disappeared between runs |
-| **Classification change** | the QA-assigned label changed (the human oracle changed its mind) |
-
-Example output (Markdown mode):
+Here is what the Markdown output looks like:
 
 ```markdown
 # Compare `search-25` → `search-26`
 
-**1 regression(s) · 1 fix(es) · 2 persistent · 1 new · 0 removed · 1 reclassified**
+Suite: search → search
+Started: 2026-05-25T09:00:00 → 2026-05-26T09:00:00
+
+**1 regression(s) · 1 fix(es) · 2 persistent · 0 new · 0 removed · 1 reclassified**
 
 ## Regressions (passed → failed)
-- `SI-POS-008` — AssertionError: Expected success, got 'error' - timeout
+- `SI-POS-008` — **AssertionError**: Expected success, got 'error' - timeout
 
 ## Fixes (failed → passed)
 - `SI-POS-005`
 
 ## Persistent failures
-- `SI-POS-006` (same error) — SQLGrammarException
-- `SI-POS-007` (same error) — SQLGrammarException
+- `SI-POS-006` (same error) — SQLGrammarException: unexpected token
+- `SI-POS-007` (same error) — SQLGrammarException: unexpected token
 
 ## Classification changes (QA oracle changed its mind)
 - `SI-POS-007`: unclassified → bug real
 ```
 
-### Why a fingerprint, not the error message
+Every tool can return JSON instead of Markdown, for when the agent needs to read the numbers and not the prose.
 
-Comparing by raw error message is fragile — timestamps, IDs and line numbers make "the same bug" look different every run. Instead each failure carries a `fingerprint`: a hash of `(test_id, error_type, normalized_message)`. Two failures with the same fingerprint are treated as the same root cause. The **producer** computes it (only the producer knows which parts of its messages are volatile), which keeps this server framework-agnostic.
+## What it doesn't do
 
-## Supported report formats (auto-detected)
+- It does not run your tests. It only reads reports. Whatever writes the report (a pytest job, a pipeline, a person) stays separate from this server.
+- It does not compute the fingerprint that groups "the same error". The producer of the report does that (more on why below).
+- No HTTP yet. It speaks stdio only, which is what local MCP clients use.
+- No dashboard and no UI. That is a separate thing that will read the same JSON one day.
+- It is not on PyPI yet. You install it from the repo.
 
-Drop either kind into the runs directory; the format is detected per file.
+## How it works
 
-**Native** (`run-report.v1.json`, schema 1.0 / 1.1) — has a `schema_version` field. See [`schemas/run-report.v1.json`](schemas/run-report.v1.json).
+**Two report formats, detected per file.** Drop either kind into the runs folder and the server works out which one it is:
 
-**Classification reports** — a CI/QA pipeline that lists *failures* with human-assigned labels, plus an optional JUnit XML sibling that supplies the passed tests:
+- Native reports have a `schema_version` field and are checked against `schemas/run-report.v1.json`.
+- Classification reports are what a QA pipeline tends to write: a list of the failures, each with a human-assigned label. If there is a JUnit XML file sitting next to it with the same name, the server reads that too, so now it also knows about the tests that passed.
 
-```
-runs/
-  search_suite_classification.json   ← failures + labels
-  search_suite.xml                   ← JUnit XML (passed + failed)
-```
+**`is_exhaustive`.** A native report, or a classification report with its XML sibling, knows every test that ran. A bare classification report only knows the failures. The compare keeps track of this: when one side only lists failures, a test that is missing is treated as passed. So a test that failed in A and is gone in B counts as a fix, not as a removed test.
 
-When the XML sibling is found, the run is `is_exhaustive=true` and every test is included. Without it, only failures load and `is_exhaustive=false`; `compare_runs` adapts — an absent test in B is treated as passed-implicit, so failing→absent becomes a **fix**, not a removed test.
+**Fingerprints.** Each failure in a report carries a `fingerprint`: a hash of the test id, the error type, and the normalized message. Two failures with the same fingerprint are treated as the same root cause. That is how `qa_compare_runs` tells "still the same bug" apart from "now it fails for a different reason".
 
-## Configuration
+**Flat parameters.** The tools take plain top-level arguments (`run_a`, `run_b`, and so on), not one nested `params` object. There is a story behind that, in the next section.
 
-Copy `.env.example` to `.env` and point `QA_TOOLKIT_RUNS_DIR` at your reports directory. `.env` is gitignored — one per machine.
+**Configuration.** Copy `.env.example` to `.env` and set `QA_TOOLKIT_RUNS_DIR` to your reports folder. A real env var wins over `.env`, which wins over the default of `./runs/`. `.env` is gitignored, so it stays one per machine.
 
-```powershell
-copy .env.example .env
-notepad .env
-```
+## Why it works this way
 
-Resolution order (highest priority first):
+**It reads reports instead of running tests** because the thing that runs the tests and the thing that reads them should not be glued together. CI runs the tests on its own schedule and writes a report. This server reads that report whenever an agent asks. Anything that writes the schema can be read, and a dashboard could read the same files later without sharing a line of code with this server.
 
-1. Real OS environment variables (e.g. set in your MCP client config or shell).
-2. `.env` in the project root.
-3. `.env` in the current working directory.
-4. Default: `./runs/` relative to the server's working directory.
+**It categorizes instead of diffing** because a raw diff makes you read everything again. A QA engineer does not treat all changes the same: a regression is urgent, a known persistent failure is something you already triaged. So the tool does that sorting up front.
 
-Keys: `QA_TOOLKIT_RUNS_DIR`, `QA_TOOLKIT_LOG_LEVEL`.
+**The fingerprint lives in the producer, not here.** Error messages change every run (timestamps, ids, line numbers), so comparing raw messages makes the same bug look new every time. A fingerprint stays stable. I put it in the producer because only the producer knows which parts of its own messages are the volatile bits, and that keeps this server framework-agnostic.
 
-## Install & run
+**The parameters are flat** because models are bad at the nested version. I found this with my own test harness: a local model could only call `qa_compare_runs` about one time in ten, because FastMCP was wrapping every argument under a required `params` object and the model kept sending the arguments flat. So I flattened the schema to match what models actually send. The whole investigation is written up in [ADR 0001](docs/adr/0001-flatten-tool-parameters.md).
+
+## Running it
+
+Install it:
 
 ```powershell
 python -m venv .venv
@@ -99,16 +91,16 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-The server speaks **stdio**, so you don't launch it by hand for normal use — your MCP client starts it as a subprocess. Register it:
+The server speaks stdio, so you do not start it by hand. Your MCP client launches it as a subprocess. Register it and point it at your reports.
 
-**Claude Code**
+Claude Code:
 
 ```powershell
 claude mcp add qa-toolkit -s user -- `
   "<repo>\.venv\Scripts\python.exe" -m qa_toolkit_mcp.server
 ```
 
-**Claude Desktop** — add to `claude_desktop_config.json`:
+Claude Desktop, in `claude_desktop_config.json`:
 
 ```json
 {
@@ -121,49 +113,32 @@ claude mcp add qa-toolkit -s user -- `
 }
 ```
 
-Explore it interactively with the MCP Inspector:
+Or poke at it by hand with the MCP Inspector:
 
 ```powershell
 npx @modelcontextprotocol/inspector .\.venv\Scripts\python.exe -m qa_toolkit_mcp.server
 ```
 
-## Testing
+Run the tests with `pytest`. The suite is layered the way I test things: the pure functions (compare, storage, the adapter, the formatters) on their own, then the tools through their real entry points, and then a set of metamorphic checks on `qa_compare_runs` - properties that have to hold whatever the input. For example, comparing a run against itself reports nothing changed, and the regressions going from A to B are exactly the fixes going from B to A.
 
-```powershell
-pytest
-```
-
-The suite mirrors a layered test strategy:
-
-- **Pure-function layer** — `compare`, `storage`, the adapter and formatters tested in isolation.
-- **Tool layer** — the registered MCP tools exercised through their entry points.
-- **Metamorphic relations** over `compare_runs` — invariants that any correct implementation must satisfy, independent of specific examples:
-  - *Identity*: `compare(A, A)` reports no changes.
-  - *Symmetry*: regressions in `compare(A, B)` equal fixes in `compare(B, A)`; new ↔ removed swap.
-  - *Coverage*: every test lands in at most one bucket per direction.
-
-## Project layout
+## Project structure
 
 ```
 qa_toolkit_mcp/
-  server.py                 FastMCP server: tools, resource, prompt, entry point
-  models.py                 Pydantic models mirroring the report schema
-  storage.py                Read + path-safety + format auto-detection
-  adapter_classification.py classification.json (+ JUnit XML) → canonical model
-  compare.py                Pure regression-analysis logic
-  formatters.py             Models → Markdown / JSON
-  config.py                 .env + env-var resolution
-schemas/run-report.v1.json  The report contract (source of truth)
-docs/adr/                   Architecture Decision Records (e.g. 0001 — flatten tool parameters)
-evaluations/                LLM evaluation questions for the server
-tests/                      Layered + metamorphic test suite
+  server.py                  the MCP server: the tools, the resource, the prompt, the entry point
+  models.py                  Pydantic models for the report schema
+  storage.py                 reads files, keeps paths safe, detects the format
+  adapter_classification.py  turns a classification report (+ JUnit XML) into the canonical model
+  compare.py                 the regression analysis, pure functions, no I/O
+  formatters.py              models to Markdown or JSON
+  config.py                  .env and env-var handling
+schemas/
+  run-report.v1.json         the report contract, the source of truth
+docs/adr/                    decision records (0001 - why the tool parameters are flat)
+evaluations/                 eval questions for the server
+tests/                       the layered + metamorphic suite
 ```
-
-## Status
-
-v0.1 — stdio transport, three tools (flat-parameter schema, see ADR 0001),
-one resource, one prompt. Not yet published to PyPI.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
